@@ -1,33 +1,61 @@
 # Sensibo Thermostat Card
 
-A thermostat-style Lovelace card for [Sensibo](https://www.home-assistant.io/integrations/sensibo/) AC controllers, with mode-coloured backgrounds and built-in support for Sensibo's native off-timer.
+A thermostat-style Lovelace card for [Sensibo](https://www.home-assistant.io/integrations/sensibo/) AC controllers with a dedicated power button, mode and fan control, mode-tinted backgrounds in three selectable styles, and first-class support for Sensibo's native off-timer — set it, watch it count down, and let the device switch itself off.
 
-The standard thermostat card doesn't surface Sensibo's timer, and gives no at-a-glance indication of the running mode. This card fixes both.
+<p align="center">
+  <img src="images/card-pastel.png" width="32%" alt="Pastel style — heat mode with timer counting down">
+  <img src="images/card-bold.png" width="32%" alt="Bold style — cool mode">
+  <img src="images/card-default.png" width="32%" alt="Default style — follows your HA theme">
+</p>
+<p align="center"><sub>Pastel · Bold · Default (follows your theme)</sub></p>
+
+The built-in thermostat card can't show Sensibo's timer, gives no at-a-glance indication of the running mode, and turning it "on" means hunting through mode buttons. This card fixes all three.
 
 ## Features
 
-- **Dedicated power button** — on/off lives on its own button, separate from mode selection. Set the mode and fan speed at any time (staged while the unit is off), then hit power.
-- **Mode buttons + fan/timer dropdowns** — a round-button row for every HVAC mode (heat/cool shown as **Auto**), and fan speed + timer as side-by-side dropdowns at the bottom of the card. Selections apply live while running, or are staged and applied at power-on while off.
-- **Thermostat-style layout** — target temperature with +/− (respects the device's min/max and step), plus current temperature and humidity.
-- **Three styles, GUI-selectable** — like [airtouch-card](https://github.com/mycrouch/airtouch-card): `default` (no gradient, follows your HA theme), `bold` (dark mode-tinted gradients, white text) or `pastel` (soft mode-tinted gradients, dark text). Gradient colours follow the selected mode — heat, cool, dry, fan-only, auto — with a smooth transition, and are overridable per mode. When the unit is off, the last mode's colour is kept and only the power button reflects the off state (airtouch-card behaviour). Brief state-bounce from the Sensibo cloud after a power press is smoothed over, so the card doesn't flicker.
-- **Native off-timer with live countdown** — the timer dropdown appears only while the unit is running. At power-on the Sensibo off-timer is armed (`sensibo.enable_timer`) at the configured start value and a live countdown is shown. Change the dropdown mid-run to re-arm at the new duration, or pick Off to cancel (the AC keeps running). Because the timer runs on the Sensibo device itself, the shutdown happens even if Home Assistant is restarting.
-- **Manual off resets the timer** — powering off cancels the timer and resets the duration to Off.
-- **Minimal IR commands** — power-on uses `sensibo.full_state`, which sends the complete AC state (remembered state + selected mode) in a single API call: one IR blast, one beep. (`climate.set_hvac_mode` from off makes two API calls in the Sensibo integration — power then mode — which beeps twice.) Mode/fan changes that match the device's current state send nothing, and the timer is a cloud-side schedule that never sends IR.
-- **No scroll-jumping** — the card updates its DOM in place rather than re-rendering, so interacting with it never bounces the dashboard back to the top.
-- **Full GUI configuration** — appears in the card picker with a visual editor. Timer entities are derived automatically from the climate entity, so minimal config is a single line.
+### Power, mode and fan — console style
+
+- **Dedicated power button.** On/off lives on its own button, separate from mode selection — one obvious tap, styled after a real AC controller. The button fills when running.
+- **Stage settings while off.** Tap a mode or pick a fan speed any time. While the unit is off the selections are simply staged (and highlighted); hitting power applies them. While running, changes apply immediately.
+- **Mode buttons.** A round-button row for every HVAC mode the device reports — cool, heat, dry, fan-only, and heat/cool (labelled **Auto**). The section label always shows the current selection.
+- **Fan speed dropdown.** Built from the device's actual `fan_modes` (quiet, low, medium, medium-high, high, auto, strong — whatever your unit supports).
+- **Target temperature** with +/− controls that respect the device's min/max and step, plus live current temperature and humidity readouts.
+
+### The off-timer
+
+- **Timer dropdown appears when the unit is running**, sitting beside the fan dropdown. Intervals and maximum are configurable (default: 10-minute steps up to 4 hours).
+- **Arms automatically at power-on** at a configurable start value (set it to 0 to disable auto-arming), using Sensibo's native `enable_timer` — the schedule lives on Sensibo's cloud, so the AC turns itself off even if Home Assistant is down at the time.
+- **Live countdown** in the timer label while running.
+- **Change it mid-run** — picking a new duration re-arms the timer; picking Off cancels it without stopping the AC.
+- **Powering off manually resets the timer.** No orphaned schedules.
+
+### Looks
+
+- **Three styles, selectable in the GUI editor** (same convention as [airtouch-card](https://github.com/mycrouch/airtouch-card)):
+  - `default` — no gradient; the card follows your installed HA theme.
+  - `bold` — deep mode-tinted gradients with white text.
+  - `pastel` — soft mode-tinted gradients with dark text.
+- **Mode-tinted background** — heat, cool, dry, fan-only and auto each get their own colour, with a smooth cross-fade on change. Individual mode colours can be overridden in YAML.
+- **Off keeps the last mode's colour** — like the AirTouch console, only the power button reflects the off state, so the card never flashes grey.
+
+### Engineering niceties
+
+- **Minimal IR commands = minimal beeps.** Power-on is sent via `sensibo.full_state` — one API call carrying the complete AC state, so the AC beeps once, not twice (`climate.set_hvac_mode` from off makes two API calls in the Sensibo integration). Mode or fan selections that match what the device is already doing send nothing at all, and the timer never sends IR.
+- **No scroll-jump, no flicker.** The DOM is built once and updated in place, and a short optimistic hold after a power press smooths over the Sensibo cloud's state-bounce (on → stale off → on).
+- **Zero-config entity wiring.** The timer switch and end-time sensor are derived automatically from the climate entity ID. Overrides available for exotic setups.
+- **Full GUI configuration** — appears in the card picker with a visual editor for entity, name, style, and all timer settings.
 
 ## Requirements
 
-- The official [Sensibo integration](https://www.home-assistant.io/integrations/sensibo/) (provides the `climate.*` entity plus the `switch.*_timer` and `sensor.*_timer_end_time` entities this card uses).
+The official [Sensibo integration](https://www.home-assistant.io/integrations/sensibo/), which provides the `climate.*` entity plus the `switch.*_timer` and `sensor.*_timer_end_time` entities this card uses.
 
 ## Installation
 
 ### HACS (recommended)
 
-1. HACS → three-dot menu → **Custom repositories**
-2. Add this repository's URL, category **Dashboard**
-3. Search for **Sensibo Thermostat Card** and download it
-4. Reload your browser (HACS registers the resource automatically)
+1. HACS → menu (⋮) → **Custom repositories** → add `https://github.com/mycrouch/sensibo-thermostat-card`, category **Dashboard**
+2. Download **Sensibo Thermostat Card** (the Lovelace resource is registered automatically)
+3. Hard-refresh your browser
 
 ### Manual
 
@@ -36,31 +64,44 @@ The standard thermostat card doesn't surface Sensibo's timer, and gives no at-a-
 
 ## Configuration
 
-Add via the dashboard UI (**Add card → Sensibo Thermostat Card**) or in YAML:
+Everything is configurable in the GUI editor (**Add card → Sensibo Thermostat Card**). YAML equivalent:
 
 ```yaml
 type: custom:sensibo-thermostat-card
 entity: climate.dining_room_sensibo_living_area
 name: Living Area          # optional, defaults to the entity's friendly name
-default_minutes: 60        # optional, initial timer duration (0 = timer off)
+style: pastel              # optional: default | bold | pastel
+default_minutes: 60        # optional, timer armed at power-on (0 = none)
+interval_minutes: 10       # optional, timer dropdown steps
+max_minutes: 240           # optional, timer dropdown maximum
 ```
 
-| Option | Required | Default | Description |
-| --- | --- | --- | --- |
-| `entity` | yes | — | Sensibo `climate` entity |
-| `name` | no | friendly name | Card title |
-| `style` | no | `pastel` | `default` (follows theme), `bold`, or `pastel` (`light` accepted as an alias) |
-| `default_minutes` | no | `60` | Timer value armed at power-on, in minutes; `0` = no timer |
-| `interval_minutes` | no | `10` | Timer dropdown interval |
-| `max_minutes` | no | `240` | Timer dropdown maximum |
-| `timer_options` | no | generated | Explicit list of minute values (overrides interval/max) |
-| `timer_switch` | no | derived | Override the `switch.*_timer` entity |
-| `timer_end` | no | derived | Override the `sensor.*_timer_end_time` entity |
-| `colors` | no | built-in | Per-mode CSS background overrides, e.g. `heat: "linear-gradient(145deg,#fdd,#fba)"` |
+| Option | Default | Description |
+| --- | --- | --- |
+| `entity` | required | Sensibo `climate` entity |
+| `name` | friendly name | Card title |
+| `style` | `pastel` | `default` (follows theme), `bold`, or `pastel` (`light` accepted as an alias) |
+| `default_minutes` | `60` | Timer value armed at power-on, in minutes; `0` = no timer |
+| `interval_minutes` | `10` | Timer dropdown interval |
+| `max_minutes` | `240` | Timer dropdown maximum |
+| `timer_options` | generated | Explicit list of minute values (overrides interval/max) |
+| `timer_switch` | derived | Override the `switch.*_timer` entity |
+| `timer_end` | derived | Override the `sensor.*_timer_end_time` entity |
+| `colors` | built-in | Per-mode CSS background overrides, e.g. `heat: "linear-gradient(145deg,#fdd,#fba)"` |
 
-### Timer behaviour
+### Timer behaviour in detail
 
-The timer dropdown is hidden while the unit is off. Powering on from the card arms the timer at `default_minutes` (set it to `0` for no automatic timer). While running, the label shows a live countdown; changing the dropdown re-arms the device timer at the new duration, and selecting Off cancels the timer without stopping the AC. Powering off manually cancels the timer. Powering on from the Sensibo app or an IR remote does not arm the timer — if you want that, pair the card with a small automation that calls `sensibo.enable_timer` when the climate entity leaves `off`.
+The timer dropdown is hidden while the unit is off. Powering on from the card arms Sensibo's native off-timer at `default_minutes` and the label becomes a live countdown. Changing the dropdown mid-run re-arms at the new duration; selecting Off cancels the timer while the AC keeps running; powering off manually cancels and resets it. Because the schedule runs on Sensibo's cloud rather than in Home Assistant, the shutdown fires even if HA is restarting.
+
+Powering on from the Sensibo app or an IR remote does not arm the timer — if you want that, pair the card with a small automation that calls `sensibo.enable_timer` when the climate entity leaves `off`.
+
+## Related projects
+
+| Repo | What it is |
+|---|---|
+| [airtouch-card](https://github.com/mycrouch/airtouch-card) | Polyaire AirTouch 4/5 console-style zone control card |
+| [ecovacs-vacuum-card](https://github.com/mycrouch/ecovacs-vacuum-card) | Ecovacs/Deebot vacuum card with per-card theming |
+| [gradient-themes](https://github.com/mycrouch/gradient-themes) | 40 gradient dashboard themes (dark + pastel variants) |
 
 ## License
 
