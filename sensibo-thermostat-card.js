@@ -1,4 +1,4 @@
-/* sensibo-thermostat-card v1.6.0
+/* sensibo-thermostat-card v1.6.1
  * Thermostat-style card for Sensibo devices. Pastel mode-coloured background,
  * dedicated power button, mode buttons ("Auto" label for heat_cool), fan-speed
  * and timer dropdowns side by side, native Sensibo off-timer with countdown.
@@ -142,7 +142,11 @@
       }
       if (this._pending === undefined) this._pending = 0;
       this._selMode = load(`stc-mode-${this._c.entity}`) || "cool";
-      this._selFan = load(`stc-fan-${this._c.entity}`) || null;
+      // Fan is staged from the device's own remembered fan_mode (reported even
+      // while off) — NOT persisted locally, so a stale per-browser value can
+      // never trigger a redundant fan command (= extra AC beep) at power-on.
+      this._selFan = null;
+      this._fanDirty = false;
       this._built = false;
       if (this._hass) this._buildAndUpdate();
     }
@@ -152,6 +156,10 @@
       const st = hass.states[this._c.entity];
       if (st && st.state !== "off") {
         this._selMode = st.state;
+        this._selFan = st.attributes.fan_mode || this._selFan;
+        this._fanDirty = false; // live state rules while on
+      } else if (st && !this._fanDirty) {
+        // While off, track the device's remembered fan speed
         this._selFan = st.attributes.fan_mode || this._selFan;
       }
       this._buildAndUpdate();
@@ -461,15 +469,19 @@
         hvac_mode: this._selMode || "cool",
       });
       const fan = this._selFan;
+      const fanDirty = this._fanDirty;
       setTimeout(() => {
-        // Skip the fan command if the unit is already on that fan speed
-        // (Sensibo remembers fan speed across power cycles)
+        // Fan command only if the user deliberately changed it while off AND
+        // it still differs from the device's remembered fan speed — otherwise
+        // Sensibo wakes up with the right fan anyway and a command = extra beep
         const cur = this._st()?.attributes || {};
-        if (fan && cur.fan_mode !== fan)
+        if (fanDirty && fan && cur.fan_mode !== fan) {
           this._svc("climate", "set_fan_mode", {
             entity_id: this._c.entity,
             fan_mode: fan,
           });
+        }
+        this._fanDirty = false;
         // enable_timer is a cloud-side schedule, not an IR command — no beep
         if (this._pending > 0)
           setTimeout(() => this._armTimer(this._pending), 600);
@@ -491,13 +503,16 @@
 
     _pickFan(f) {
       this._selFan = f;
-      store(`stc-fan-${this._c.entity}`, f);
-      // Only command the device if it's on AND not already on that fan speed
-      if (this._on() && this._st()?.attributes?.fan_mode !== f)
-        this._svc("climate", "set_fan_mode", {
-          entity_id: this._c.entity,
-          fan_mode: f,
-        });
+      if (this._on()) {
+        // Only command the device if it's not already on that fan speed
+        if (this._st()?.attributes?.fan_mode !== f)
+          this._svc("climate", "set_fan_mode", {
+            entity_id: this._c.entity,
+            fan_mode: f,
+          });
+      } else {
+        this._fanDirty = true; // apply at power-on
+      }
       this._update();
     }
 
