@@ -1,4 +1,4 @@
-/* sensibo-thermostat-card v1.6.1
+/* sensibo-thermostat-card v1.6.2
  * Thermostat-style card for Sensibo devices. Pastel mode-coloured background,
  * dedicated power button, mode buttons ("Auto" label for heat_cool), fan-speed
  * and timer dropdowns side by side, native Sensibo off-timer with countdown.
@@ -461,12 +461,24 @@
       }
       // Power on: apply staged mode + fan, then arm timer at the configured start value.
       // Only send what actually differs — every IR command beeps the AC.
+      // NOTE: climate.set_hvac_mode from off makes TWO API calls in the Sensibo
+      // integration ("on"=true, then "mode") = two IR blasts = two beeps.
+      // sensibo.full_state posts one complete acState (current remembered state
+      // + our mode) in a SINGLE call = one IR blast = one beep.
       this._optOnUntil = Date.now() + 5000;
       this._optOffUntil = 0;
       this._pending = this._c.default_minutes;
-      this._svc("climate", "set_hvac_mode", {
+      const M2S = {
+        cool: "cool",
+        heat: "heat",
+        dry: "dry",
+        fan_only: "fan",
+        heat_cool: "auto",
+        auto: "auto",
+      };
+      this._svc("sensibo", "full_state", {
         entity_id: this._c.entity,
-        hvac_mode: this._selMode || "cool",
+        mode: M2S[this._selMode] || "cool",
       });
       const fan = this._selFan;
       const fanDirty = this._fanDirty;
