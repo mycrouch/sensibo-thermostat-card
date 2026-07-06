@@ -1,4 +1,4 @@
-/* sensibo-thermostat-card v1.4.0
+/* sensibo-thermostat-card v1.5.0
  * Thermostat-style card for Sensibo devices. Pastel mode-coloured background,
  * dedicated power button, mode buttons ("Auto" label for heat_cool), fan-speed
  * and timer dropdowns side by side, native Sensibo off-timer with countdown.
@@ -166,6 +166,10 @@
       return this._hass?.states[this._c.entity];
     }
     _on() {
+      // Optimistic windows: after a power press, hold the target state for a
+      // few seconds so integration state-bounce (on -> stale off -> on) doesn't flicker the card
+      if (this._optOffUntil && Date.now() < this._optOffUntil) return false;
+      if (this._optOnUntil && Date.now() < this._optOnUntil) return true;
       const st = this._st();
       return st && st.state !== "off";
     }
@@ -332,7 +336,9 @@
       if (!st || !this._built) return;
       const a = st.attributes;
       const on = this._on();
-      const dispMode = on ? st.state : "off";
+      // Background always follows the (last) selected mode — off state is
+      // shown by the power button only, matching airtouch-card behaviour
+      const bgMode = this._selMode || "off";
       const style = this._c.style;
       const th = THEMES[style];
       const userColors = this._c.colors || {};
@@ -340,9 +346,9 @@
 
       const bg =
         style === "default"
-          ? userColors[dispMode] ||
+          ? userColors[bgMode] ||
             "var(--ha-card-background,var(--card-background-color,#fff))"
-          : { ...BG[style], ...userColors }[dispMode] || BG[style].off;
+          : { ...BG[style], ...userColors }[bgMode] || BG[style].off;
       const vars = {
         "--stc-bg": bg,
         "--stc-fg": th.fg,
@@ -434,6 +440,8 @@
     _power() {
       if (this._on()) {
         // Manual off: reset timer to off
+        this._optOffUntil = Date.now() + 5000;
+        this._optOnUntil = 0;
         this._svc("climate", "set_hvac_mode", {
           entity_id: this._c.entity,
           hvac_mode: "off",
@@ -444,6 +452,8 @@
         return;
       }
       // Power on: apply staged mode + fan, then arm timer at the configured start value
+      this._optOnUntil = Date.now() + 5000;
+      this._optOffUntil = 0;
       this._pending = this._c.default_minutes;
       this._svc("climate", "set_hvac_mode", {
         entity_id: this._c.entity,
