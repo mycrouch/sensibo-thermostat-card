@@ -1,9 +1,10 @@
-/* sensibo-thermostat-card v1.2.0
+/* sensibo-thermostat-card v1.3.0
  * Thermostat-style card for Sensibo devices. Pastel mode-coloured background,
  * dedicated power button, mode buttons ("Auto" label for heat_cool), fan-speed
  * and timer dropdowns side by side, native Sensibo off-timer with countdown.
- * Incremental DOM updates (no full re-render) so the page never scroll-jumps.
- * Config (GUI editable): entity (climate), name, default_minutes.
+ * Timer dropdown only shows while powered on; arms at power-on with the
+ * configured start value. DOM is built once and updated in place (no rebuilds).
+ * Config (GUI editable): entity, name, default_minutes, interval_minutes, max_minutes.
  * YAML extras: timer_options:[minutes], timer_switch, timer_end, colors:{mode:css}.
  */
 (() => {
@@ -27,7 +28,6 @@
     auto: "linear-gradient(160deg,#ddf0d8,#b5dcac)",
     off: "linear-gradient(160deg,#e8eaee,#d2d6dc)",
   };
-  const DEFAULT_TIMER_OPTIONS = [0, 30, 60, 90, 120, 180, 240, 360, 480];
   const fmtDur = (m) => {
     if (!m || m <= 0) return "Off";
     const h = Math.floor(m / 60), r = m % 60;
@@ -66,13 +66,20 @@
       const slug = config.entity.slice(8);
       this._c = {
         default_minutes: 60,
-        timer_options: DEFAULT_TIMER_OPTIONS,
+        interval_minutes: 10,
+        max_minutes: 240,
         timer_switch: `switch.${slug}_timer`,
         timer_end: `sensor.${slug}_timer_end_time`,
         ...config,
       };
-      if (this._pending === undefined)
-        this._pending = this._c.default_minutes;
+      // Timer dropdown options: explicit list, or 0..max at interval steps
+      if (!this._c.timer_options) {
+        const step = Math.max(1, this._c.interval_minutes);
+        const opts = [0];
+        for (let m = step; m <= this._c.max_minutes; m += step) opts.push(m);
+        this._c.timer_options = opts;
+      }
+      if (this._pending === undefined) this._pending = 0;
       this._selMode = load(`stc-mode-${this._c.entity}`) || "cool";
       this._selFan = load(`stc-fan-${this._c.entity}`) || null;
       this._built = false;
@@ -138,17 +145,16 @@
       }
       this._errShown = false;
       const a = st.attributes;
-      const modesKey = JSON.stringify([a.hvac_modes, a.fan_modes]);
-      if (!this._built || this._modesKey !== modesKey) {
-        this._modesKey = modesKey;
-        this._build(a);
-      }
+      // Build once only — attribute-list changes are synced in place by _update()
+      // (a full rebuild here caused the page to scroll-jump on power-on).
+      if (!this._built) this._build(a);
       this._update();
     }
 
     _build(a) {
       const modes = (a.hvac_modes || []).filter((m) => m !== "off" && ICONS[m]);
       const fans = a.fan_modes || [];
+      this._fansKey = JSON.stringify(fans);
       const topts = [...this._c.timer_options];
 
       this.shadowRoot.innerHTML = `
@@ -218,7 +224,7 @@
           .join("")}
       </select>
     </div>
-    <div class="dd">
+    <div class="dd" id="timerdd">
       <span class="lbl" id="timerlbl">Timer</span>
       <select id="timersel">
         ${topts
@@ -227,7 +233,6 @@
       </select>
     </div>
   </div>
-  <div class="hint" id="hint"></div>
 </ha-card>`;
 
       const $ = (id) => this.shadowRoot.getElementById(id);
@@ -242,9 +247,9 @@
         modelbl: $("modelbl"),
         modeBtns: [...this.shadowRoot.querySelectorAll(".mbtn.mode")],
         fansel: $("fansel"),
+        timerdd: $("timerdd"),
         timerlbl: $("timerlbl"),
         timersel: $("timersel"),
-        hint: $("hint"),
         tup: $("tup"),
         tdn: $("tdn"),
       };
@@ -291,23 +296,28 @@
         b.classList.toggle("sel", b.dataset.v === this._selMode)
       );
 
+      // Sync fan options in place if the device's fan_modes list changed
+      const fansKey = JSON.stringify(a.fan_modes || []);
+      if (fansKey !== this._fansKey && this.shadowRoot.activeElement !== e.fansel) {
+        this._fansKey = fansKey;
+        e.fansel.innerHTML = (a.fan_modes || [])
+          .map((f) => `<option value="${f}">${fanLabel(f)}</option>`)
+          .join("");
+      }
       const selFan = on ? a.fan_mode : this._selFan || a.fan_mode;
-      if (selFan != null && e.fansel.value !== selFan && document.activeElement !== e.fansel)
+      if (selFan != null && e.fansel.value !== selFan && this.shadowRoot.activeElement !== e.fansel)
         e.fansel.value = selFan;
 
+      // Timer dropdown only shows while powered on
+      e.timerdd.style.visibility = on ? "visible" : "hidden";
       const active = this._timerActive();
       if (!active) {
         e.timerlbl.textContent = "Timer";
         this._ensureTimerOption(this._pending);
-        if (document.activeElement !== e.timersel)
+        if (this.shadowRoot.activeElement !== e.timersel)
           e.timersel.value = String(this._pending);
-        e.hint.textContent =
-          !on && this._pending > 0
-            ? `Timer starts at power on — AC will run for ${fmtDur(this._pending)}`
-            : "";
       } else {
         this._updateCount();
-        e.hint.textContent = "";
       }
     }
 
@@ -350,7 +360,8 @@
         this._update();
         return;
       }
-      // Power on: apply staged mode + fan, then arm timer if set
+      // Power on: apply staged mode + fan, then arm timer at the configured start value
+      this._pending = this._c.default_minutes;
       this._svc("climate", "set_hvac_mode", {
         entity_id: this._c.entity,
         hvac_mode: this._selMode || "cool",
@@ -451,7 +462,9 @@
           ({
             entity: "Climate entity (Sensibo)",
             name: "Name (optional)",
-            default_minutes: "Default timer (minutes, 0 = off)",
+            default_minutes: "Timer start value at power-on (minutes, 0 = off)",
+            interval_minutes: "Timer dropdown interval (minutes)",
+            max_minutes: "Timer dropdown maximum (minutes)",
           }[s.name] || s.name);
         this._form.schema = [
           {
@@ -462,7 +475,15 @@
           { name: "name", selector: { text: {} } },
           {
             name: "default_minutes",
-            selector: { number: { min: 0, step: 15, mode: "box" } },
+            selector: { number: { min: 0, step: 5, mode: "box" } },
+          },
+          {
+            name: "interval_minutes",
+            selector: { number: { min: 5, max: 60, step: 5, mode: "box" } },
+          },
+          {
+            name: "max_minutes",
+            selector: { number: { min: 30, step: 30, mode: "box" } },
           },
         ];
         this._form.addEventListener("value-changed", (ev) => {
@@ -481,7 +502,12 @@
         this.appendChild(this._form);
       }
       if (this._hass) this._form.hass = this._hass;
-      this._form.data = { default_minutes: 60, ...this._config };
+      this._form.data = {
+        default_minutes: 60,
+        interval_minutes: 10,
+        max_minutes: 240,
+        ...this._config,
+      };
     }
   }
 

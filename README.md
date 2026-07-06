@@ -10,7 +10,7 @@ The standard thermostat card doesn't surface Sensibo's timer, and gives no at-a-
 - **Mode buttons + fan/timer dropdowns** — a round-button row for every HVAC mode (heat/cool shown as **Auto**), and fan speed + timer as side-by-side dropdowns at the bottom of the card. Selections apply live while running, or are staged and applied at power-on while off.
 - **Thermostat-style layout** — target temperature with +/− (respects the device's min/max and step), plus current temperature and humidity.
 - **Pastel mode-coloured background** — the whole card changes colour with the running mode, with a smooth transition: heat peach, cool blue, dry cream, fan-only mint, auto green, off grey. Colours are overridable per mode.
-- **Native off-timer with live countdown** — pick a duration from the dropdown; at power-on the Sensibo off-timer is armed (`sensibo.enable_timer`) and a live countdown is shown. Change the dropdown mid-run to re-arm at the new duration, or pick Off to cancel (the AC keeps running). Because the timer runs on the Sensibo device itself, the shutdown happens even if Home Assistant is restarting.
+- **Native off-timer with live countdown** — the timer dropdown appears only while the unit is running. At power-on the Sensibo off-timer is armed (`sensibo.enable_timer`) at the configured start value and a live countdown is shown. Change the dropdown mid-run to re-arm at the new duration, or pick Off to cancel (the AC keeps running). Because the timer runs on the Sensibo device itself, the shutdown happens even if Home Assistant is restarting.
 - **Manual off resets the timer** — powering off cancels the timer and resets the duration to Off.
 - **No scroll-jumping** — the card updates its DOM in place rather than re-rendering, so interacting with it never bounces the dashboard back to the top.
 - **Full GUI configuration** — appears in the card picker with a visual editor. Timer entities are derived automatically from the climate entity, so minimal config is a single line.
@@ -48,15 +48,17 @@ default_minutes: 60        # optional, initial timer duration (0 = timer off)
 | --- | --- | --- | --- |
 | `entity` | yes | — | Sensibo `climate` entity |
 | `name` | no | friendly name | Card title |
-| `default_minutes` | no | `60` | Initial timer dropdown value in minutes; `0` = Off |
-| `timer_options` | no | `[0,30,60,90,120,180,240,360,480]` | Minute values offered in the timer dropdown |
+| `default_minutes` | no | `60` | Timer value armed at power-on, in minutes; `0` = no timer |
+| `interval_minutes` | no | `10` | Timer dropdown interval |
+| `max_minutes` | no | `240` | Timer dropdown maximum |
+| `timer_options` | no | generated | Explicit list of minute values (overrides interval/max) |
 | `timer_switch` | no | derived | Override the `switch.*_timer` entity |
 | `timer_end` | no | derived | Override the `sensor.*_timer_end_time` entity |
 | `colors` | no | built-in | Per-mode CSS background overrides, e.g. `heat: "linear-gradient(145deg,#fdd,#fba)"` |
 
 ### Timer behaviour
 
-The timer arms **at power-on from the card** if a duration is selected. While running, the label shows a live countdown; changing the dropdown re-arms the device timer at the new duration, and selecting Off cancels the timer without stopping the AC. Powering off manually cancels the timer and resets the dropdown to Off. Powering on from the Sensibo app or an IR remote does not arm the timer — if you want that, pair the card with a small automation that calls `sensibo.enable_timer` when the climate entity leaves `off`.
+The timer dropdown is hidden while the unit is off. Powering on from the card arms the timer at `default_minutes` (set it to `0` for no automatic timer). While running, the label shows a live countdown; changing the dropdown re-arms the device timer at the new duration, and selecting Off cancels the timer without stopping the AC. Powering off manually cancels the timer. Powering on from the Sensibo app or an IR remote does not arm the timer — if you want that, pair the card with a small automation that calls `sensibo.enable_timer` when the climate entity leaves `off`.
 
 ## License
 
