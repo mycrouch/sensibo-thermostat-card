@@ -1,0 +1,6 @@
+{
+  "name": "Sensibo Thermostat Card",
+  "filename": "sensibo-thermostat-card.js",
+  "render_readme": true,
+  "homeassistant": "2024.1.0"
+}
