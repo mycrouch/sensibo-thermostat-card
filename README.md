@@ -7,11 +7,12 @@ The standard thermostat card doesn't surface Sensibo's timer, and gives no at-a-
 ## Features
 
 - **Dedicated power button** — on/off lives on its own button, separate from mode selection. Set the mode and fan speed at any time (staged while the unit is off), then hit power.
-- **Mode + fan speed rows** — round-button rows for every HVAC mode and fan speed the device supports. Selections apply live while running, or are staged and applied at power-on while off.
+- **Mode buttons + fan/timer dropdowns** — a round-button row for every HVAC mode (heat/cool shown as **Auto**), and fan speed + timer as side-by-side dropdowns at the bottom of the card. Selections apply live while running, or are staged and applied at power-on while off.
 - **Thermostat-style layout** — target temperature with +/− (respects the device's min/max and step), plus current temperature and humidity.
-- **Mode-coloured background** — the whole card changes colour with the running mode, with a smooth transition: heat orange, cool blue, dry amber, fan-only teal, heat/cool green, off dark grey. Colours are overridable per mode.
-- **Native off-timer with live countdown** — set a duration with the +/− stepper; at power-on the Sensibo off-timer is armed (`sensibo.enable_timer`) and a live countdown is shown. Adjust the remaining time mid-run with +/−, or cancel with ✕ (the AC keeps running). Because the timer runs on the Sensibo device itself, the shutdown happens even if Home Assistant is restarting.
-- **Manual off resets the timer** — powering off cancels the timer and resets the duration to zero.
+- **Pastel mode-coloured background** — the whole card changes colour with the running mode, with a smooth transition: heat peach, cool blue, dry cream, fan-only mint, auto green, off grey. Colours are overridable per mode.
+- **Native off-timer with live countdown** — pick a duration from the dropdown; at power-on the Sensibo off-timer is armed (`sensibo.enable_timer`) and a live countdown is shown. Change the dropdown mid-run to re-arm at the new duration, or pick Off to cancel (the AC keeps running). Because the timer runs on the Sensibo device itself, the shutdown happens even if Home Assistant is restarting.
+- **Manual off resets the timer** — powering off cancels the timer and resets the duration to Off.
+- **No scroll-jumping** — the card updates its DOM in place rather than re-rendering, so interacting with it never bounces the dashboard back to the top.
 - **Full GUI configuration** — appears in the card picker with a visual editor. Timer entities are derived automatically from the climate entity, so minimal config is a single line.
 
 ## Requirements
@@ -41,22 +42,21 @@ type: custom:sensibo-thermostat-card
 entity: climate.dining_room_sensibo_living_area
 name: Living Area          # optional, defaults to the entity's friendly name
 default_minutes: 60        # optional, initial timer duration (0 = timer off)
-step_minutes: 30           # optional, stepper increment
 ```
 
 | Option | Required | Default | Description |
 | --- | --- | --- | --- |
 | `entity` | yes | — | Sensibo `climate` entity |
 | `name` | no | friendly name | Card title |
-| `default_minutes` | no | `60` | Initial timer duration in minutes; `0` disables |
-| `step_minutes` | no | `30` | Stepper increment in minutes |
+| `default_minutes` | no | `60` | Initial timer dropdown value in minutes; `0` = Off |
+| `timer_options` | no | `[0,30,60,90,120,180,240,360,480]` | Minute values offered in the timer dropdown |
 | `timer_switch` | no | derived | Override the `switch.*_timer` entity |
 | `timer_end` | no | derived | Override the `sensor.*_timer_end_time` entity |
-| `colors` | no | built-in | Per-mode CSS background overrides, e.g. `heat: "linear-gradient(145deg,#900,#f60)"` |
+| `colors` | no | built-in | Per-mode CSS background overrides, e.g. `heat: "linear-gradient(145deg,#fdd,#fba)"` |
 
 ### Timer behaviour
 
-The timer arms **at power-on from the card** if a duration is set. While running, +/− adjusts the remaining time (re-arming the device timer), ✕ cancels the timer without stopping the AC, and powering off manually cancels the timer and resets the duration to zero. Powering on from the Sensibo app or an IR remote does not arm the timer — if you want that, pair the card with a small automation that calls `sensibo.enable_timer` when the climate entity leaves `off`.
+The timer arms **at power-on from the card** if a duration is selected. While running, the label shows a live countdown; changing the dropdown re-arms the device timer at the new duration, and selecting Off cancels the timer without stopping the AC. Powering off manually cancels the timer and resets the dropdown to Off. Powering on from the Sensibo app or an IR remote does not arm the timer — if you want that, pair the card with a small automation that calls `sensibo.enable_timer` when the climate entity leaves `off`.
 
 ## License
 
