@@ -1,4 +1,4 @@
-/* sensibo-thermostat-card v1.3.0
+/* sensibo-thermostat-card v1.4.0
  * Thermostat-style card for Sensibo devices. Pastel mode-coloured background,
  * dedicated power button, mode buttons ("Auto" label for heat_cool), fan-speed
  * and timer dropdowns side by side, native Sensibo off-timer with countdown.
@@ -19,14 +19,72 @@
   const modeLabel = (m) =>
     m === "heat_cool" ? "Auto" : (m || "").replace("_", " ");
   const fanLabel = (f) => (f || "").replace("_", " ");
-  const COLORS = {
-    heat: "linear-gradient(160deg,#ffe3d5,#ffc4a8)",
-    cool: "linear-gradient(160deg,#d9ecff,#aed4f2)",
-    dry: "linear-gradient(160deg,#fff3cf,#ffe19a)",
-    fan_only: "linear-gradient(160deg,#d5f0eb,#a8ddd3)",
-    heat_cool: "linear-gradient(160deg,#ddf0d8,#b5dcac)",
-    auto: "linear-gradient(160deg,#ddf0d8,#b5dcac)",
-    off: "linear-gradient(160deg,#e8eaee,#d2d6dc)",
+  const BG = {
+    bold: {
+      heat: "linear-gradient(160deg,#3b1006,#8a3413 55%,#c05621)",
+      cool: "linear-gradient(160deg,#062136,#0b4f79 55%,#1a7db0)",
+      dry: "linear-gradient(160deg,#332300,#8a5a00 55%,#c98a1b)",
+      fan_only: "linear-gradient(160deg,#04211e,#0c554c 55%,#1b8577)",
+      heat_cool: "linear-gradient(160deg,#0c2410,#2c6b33 55%,#4a9b52)",
+      auto: "linear-gradient(160deg,#0c2410,#2c6b33 55%,#4a9b52)",
+      off: "linear-gradient(160deg,#191c20,#272c33 55%,#343b44)",
+    },
+    pastel: {
+      heat: "linear-gradient(160deg,#ffe3d5,#ffc4a8)",
+      cool: "linear-gradient(160deg,#d9ecff,#aed4f2)",
+      dry: "linear-gradient(160deg,#fff3cf,#ffe19a)",
+      fan_only: "linear-gradient(160deg,#d5f0eb,#a8ddd3)",
+      heat_cool: "linear-gradient(160deg,#ddf0d8,#b5dcac)",
+      auto: "linear-gradient(160deg,#ddf0d8,#b5dcac)",
+      off: "linear-gradient(160deg,#e8eaee,#d2d6dc)",
+    },
+  };
+  const THEMES = {
+    bold: {
+      fg: "#fff",
+      sub: "rgba(255,255,255,.72)",
+      surface: "rgba(255,255,255,.12)",
+      btnBg: "rgba(255,255,255,.16)",
+      btnFg: "rgba(255,255,255,.75)",
+      selBg: "#fff",
+      selFg: "#2b2d31",
+      selectBg: "rgba(255,255,255,.18)",
+      pwrBorder: "rgba(255,255,255,.4)",
+      pwrBg: "rgba(255,255,255,.1)",
+      pwrFg: "#fff",
+      pwrOnBg: "#fff",
+      pwrOnFg: "#2b2d31",
+    },
+    pastel: {
+      fg: "#2b2d31",
+      sub: "rgba(0,0,0,.55)",
+      surface: "rgba(255,255,255,.45)",
+      btnBg: "rgba(0,0,0,.08)",
+      btnFg: "rgba(0,0,0,.55)",
+      selBg: "#2b2d31",
+      selFg: "#fff",
+      selectBg: "rgba(255,255,255,.7)",
+      pwrBorder: "rgba(0,0,0,.3)",
+      pwrBg: "rgba(255,255,255,.4)",
+      pwrFg: "#2b2d31",
+      pwrOnBg: "#2b2d31",
+      pwrOnFg: "#fff",
+    },
+    default: {
+      fg: "var(--primary-text-color)",
+      sub: "var(--secondary-text-color)",
+      surface: "rgba(127,127,127,.12)",
+      btnBg: "rgba(127,127,127,.18)",
+      btnFg: "var(--secondary-text-color)",
+      selBg: "var(--primary-color)",
+      selFg: "#fff",
+      selectBg: "rgba(127,127,127,.15)",
+      pwrBorder: "var(--divider-color,rgba(127,127,127,.5))",
+      pwrBg: "transparent",
+      pwrFg: "var(--primary-text-color)",
+      pwrOnBg: "var(--primary-color)",
+      pwrOnFg: "#fff",
+    },
   };
   const fmtDur = (m) => {
     if (!m || m <= 0) return "Off";
@@ -68,10 +126,13 @@
         default_minutes: 60,
         interval_minutes: 10,
         max_minutes: 240,
+        style: "pastel",
         timer_switch: `switch.${slug}_timer`,
         timer_end: `sensor.${slug}_timer_end_time`,
         ...config,
       };
+      if (this._c.style === "light") this._c.style = "pastel"; // airtouch-card alias
+      if (!THEMES[this._c.style]) this._c.style = "pastel";
       // Timer dropdown options: explicit list, or 0..max at interval steps
       if (!this._c.timer_options) {
         const step = Math.max(1, this._c.interval_minutes);
@@ -159,32 +220,31 @@
 
       this.shadowRoot.innerHTML = `
 <style>
-  ha-card{color:#2b2d31;padding:18px;border-radius:var(--ha-card-border-radius,14px);transition:background .6s ease;}
+  ha-card{background:var(--stc-bg);color:var(--stc-fg);padding:18px;border-radius:var(--ha-card-border-radius,14px);transition:background .6s ease;}
   .hdr{display:flex;align-items:center;gap:12px;}
-  .pwr{width:48px;height:48px;border-radius:50%;border:2px solid rgba(0,0,0,.3);cursor:pointer;display:flex;align-items:center;justify-content:center;flex:none;transition:all .3s;background:rgba(255,255,255,.4);color:#2b2d31;}
-  .pwr.on{background:#2b2d31;color:#fff;border-color:#2b2d31;}
+  .pwr{width:48px;height:48px;border-radius:50%;border:2px solid var(--stc-pwr-border);cursor:pointer;display:flex;align-items:center;justify-content:center;flex:none;transition:all .3s;background:var(--stc-pwr-bg);color:var(--stc-pwr-fg);}
+  .pwr.on{background:var(--stc-pwr-on-bg);color:var(--stc-pwr-on-fg);border-color:var(--stc-pwr-on-bg);}
   .pwr ha-icon{--mdc-icon-size:26px;}
   .name{font-size:1.15rem;font-weight:500;flex:1;}
   .big{font-size:2.6rem;font-weight:300;line-height:1;}
   .big sup{font-size:1rem;font-weight:400;opacity:.7;}
-  .setrow{display:flex;align-items:center;justify-content:space-between;margin:16px 2px 4px;background:rgba(255,255,255,.45);border-radius:12px;padding:10px 14px;}
-  .lbl{font-size:.78rem;letter-spacing:.12em;text-transform:uppercase;opacity:.65;}
+  .setrow{display:flex;align-items:center;justify-content:space-between;margin:16px 2px 4px;background:var(--stc-surface);border-radius:12px;padding:10px 14px;}
+  .lbl{font-size:.78rem;letter-spacing:.12em;text-transform:uppercase;color:var(--stc-sub);}
   .stepper{display:flex;align-items:center;gap:14px;}
-  .rbtn{width:36px;height:36px;border-radius:50%;border:none;background:rgba(0,0,0,.1);color:#2b2d31;font-size:1.25rem;cursor:pointer;display:flex;align-items:center;justify-content:center;}
-  .rbtn:active{background:rgba(0,0,0,.25);}
+  .rbtn{width:36px;height:36px;border-radius:50%;border:none;background:var(--stc-btn-bg);color:var(--stc-fg);font-size:1.25rem;cursor:pointer;display:flex;align-items:center;justify-content:center;}
+  .rbtn:active{filter:brightness(1.3);}
   .sval{min-width:52px;text-align:center;font-size:1.25rem;font-weight:500;font-variant-numeric:tabular-nums;}
-  .cur{font-size:.85rem;opacity:.65;}
+  .cur{font-size:.85rem;color:var(--stc-sub);}
   .modes{margin-top:16px;}
-  .seclbl{text-align:center;font-size:.78rem;letter-spacing:.12em;text-transform:uppercase;opacity:.65;margin-bottom:8px;}
+  .seclbl{text-align:center;font-size:.78rem;letter-spacing:.12em;text-transform:uppercase;color:var(--stc-sub);margin-bottom:8px;}
   .btnrow{display:flex;justify-content:center;gap:8px;flex-wrap:wrap;}
-  .mbtn{width:44px;height:44px;border-radius:50%;border:none;cursor:pointer;background:rgba(0,0,0,.08);color:rgba(0,0,0,.55);display:flex;align-items:center;justify-content:center;}
-  .mbtn.sel{background:#2b2d31;color:#fff;box-shadow:0 2px 8px rgba(0,0,0,.25);}
+  .mbtn{width:44px;height:44px;border-radius:50%;border:none;cursor:pointer;background:var(--stc-btn-bg);color:var(--stc-btn-fg);display:flex;align-items:center;justify-content:center;}
+  .mbtn.sel{background:var(--stc-sel-bg);color:var(--stc-sel-fg);box-shadow:0 2px 8px rgba(0,0,0,.25);}
   .mbtn ha-icon{--mdc-icon-size:22px;}
   .bottom{display:flex;gap:10px;margin-top:16px;}
-  .dd{flex:1;background:rgba(255,255,255,.45);border-radius:12px;padding:10px 12px;}
+  .dd{flex:1;background:var(--stc-surface);border-radius:12px;padding:10px 12px;}
   .dd .lbl{display:block;margin-bottom:6px;}
-  select{width:100%;border:none;border-radius:8px;padding:8px 10px;font-size:.95rem;background:rgba(255,255,255,.7);color:#2b2d31;cursor:pointer;outline:none;appearance:auto;}
-  .hint{font-size:.72rem;opacity:.55;margin-top:8px;text-align:center;}
+  select{width:100%;border:none;border-radius:8px;padding:8px 10px;font-size:.95rem;background:var(--stc-select-bg);color:var(--stc-fg);cursor:pointer;outline:none;appearance:auto;}
 </style>
 <ha-card>
   <div class="hdr">
@@ -273,10 +333,33 @@
       const a = st.attributes;
       const on = this._on();
       const dispMode = on ? st.state : "off";
-      const colors = { ...COLORS, ...(this._c.colors || {}) };
+      const style = this._c.style;
+      const th = THEMES[style];
+      const userColors = this._c.colors || {};
       const e = this._el;
 
-      e.card.style.background = colors[dispMode] || COLORS.off;
+      const bg =
+        style === "default"
+          ? userColors[dispMode] ||
+            "var(--ha-card-background,var(--card-background-color,#fff))"
+          : { ...BG[style], ...userColors }[dispMode] || BG[style].off;
+      const vars = {
+        "--stc-bg": bg,
+        "--stc-fg": th.fg,
+        "--stc-sub": th.sub,
+        "--stc-surface": th.surface,
+        "--stc-btn-bg": th.btnBg,
+        "--stc-btn-fg": th.btnFg,
+        "--stc-sel-bg": th.selBg,
+        "--stc-sel-fg": th.selFg,
+        "--stc-select-bg": th.selectBg,
+        "--stc-pwr-border": th.pwrBorder,
+        "--stc-pwr-bg": th.pwrBg,
+        "--stc-pwr-fg": th.pwrFg,
+        "--stc-pwr-on-bg": th.pwrOnBg,
+        "--stc-pwr-on-fg": th.pwrOnFg,
+      };
+      for (const k in vars) e.card.style.setProperty(k, vars[k]);
       e.pwr.classList.toggle("on", on);
       e.name.textContent =
         this._c.name || a.friendly_name || this._c.entity;
@@ -462,6 +545,7 @@
           ({
             entity: "Climate entity (Sensibo)",
             name: "Name (optional)",
+            style: "Style",
             default_minutes: "Timer start value at power-on (minutes, 0 = off)",
             interval_minutes: "Timer dropdown interval (minutes)",
             max_minutes: "Timer dropdown maximum (minutes)",
@@ -473,6 +557,19 @@
             selector: { entity: { domain: "climate" } },
           },
           { name: "name", selector: { text: {} } },
+          {
+            name: "style",
+            selector: {
+              select: {
+                mode: "dropdown",
+                options: [
+                  { value: "default", label: "Default (follows theme)" },
+                  { value: "bold", label: "Bold" },
+                  { value: "pastel", label: "Pastel" },
+                ],
+              },
+            },
+          },
           {
             name: "default_minutes",
             selector: { number: { min: 0, step: 5, mode: "box" } },
@@ -506,6 +603,7 @@
         default_minutes: 60,
         interval_minutes: 10,
         max_minutes: 240,
+        style: "pastel",
         ...this._config,
       };
     }
