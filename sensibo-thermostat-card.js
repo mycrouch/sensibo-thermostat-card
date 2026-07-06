@@ -1,4 +1,4 @@
-/* sensibo-thermostat-card v1.5.0
+/* sensibo-thermostat-card v1.6.0
  * Thermostat-style card for Sensibo devices. Pastel mode-coloured background,
  * dedicated power button, mode buttons ("Auto" label for heat_cool), fan-speed
  * and timer dropdowns side by side, native Sensibo off-timer with countdown.
@@ -451,7 +451,8 @@
         this._update();
         return;
       }
-      // Power on: apply staged mode + fan, then arm timer at the configured start value
+      // Power on: apply staged mode + fan, then arm timer at the configured start value.
+      // Only send what actually differs — every IR command beeps the AC.
       this._optOnUntil = Date.now() + 5000;
       this._optOffUntil = 0;
       this._pending = this._c.default_minutes;
@@ -461,11 +462,15 @@
       });
       const fan = this._selFan;
       setTimeout(() => {
-        if (fan)
+        // Skip the fan command if the unit is already on that fan speed
+        // (Sensibo remembers fan speed across power cycles)
+        const cur = this._st()?.attributes || {};
+        if (fan && cur.fan_mode !== fan)
           this._svc("climate", "set_fan_mode", {
             entity_id: this._c.entity,
             fan_mode: fan,
           });
+        // enable_timer is a cloud-side schedule, not an IR command — no beep
         if (this._pending > 0)
           setTimeout(() => this._armTimer(this._pending), 600);
       }, 700);
@@ -475,7 +480,8 @@
     _pickMode(m) {
       this._selMode = m;
       store(`stc-mode-${this._c.entity}`, m);
-      if (this._on())
+      // Only command the device if it's on AND not already in that mode
+      if (this._on() && this._st()?.state !== m)
         this._svc("climate", "set_hvac_mode", {
           entity_id: this._c.entity,
           hvac_mode: m,
@@ -486,7 +492,8 @@
     _pickFan(f) {
       this._selFan = f;
       store(`stc-fan-${this._c.entity}`, f);
-      if (this._on())
+      // Only command the device if it's on AND not already on that fan speed
+      if (this._on() && this._st()?.attributes?.fan_mode !== f)
         this._svc("climate", "set_fan_mode", {
           entity_id: this._c.entity,
           fan_mode: f,
