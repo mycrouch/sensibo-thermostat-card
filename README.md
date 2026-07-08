@@ -95,13 +95,19 @@ The timer dropdown is hidden while the unit is off. Powering on from the card ar
 
 Powering on from the Sensibo app or an IR remote does not arm the timer — if you want that, pair the card with a small automation that calls `sensibo.enable_timer` when the climate entity leaves `off`.
 
-## Related projects
+## The mycrouch card collection
 
-| Repo | What it is |
-|---|---|
-| [airtouch-card](https://github.com/mycrouch/airtouch-card) | Polyaire AirTouch 4/5 console-style zone control card |
-| [ecovacs-vacuum-card](https://github.com/mycrouch/ecovacs-vacuum-card) | Ecovacs/Deebot vacuum card with per-card theming |
-| [gradient-themes](https://github.com/mycrouch/gradient-themes) | 40 gradient dashboard themes (dark + pastel variants) |
+These Home Assistant Lovelace cards share a common design language — a clean **default** look that inherits your active theme, plus a per-card **theme** picker — so they sit together neatly on one dashboard. Pair any of them with **gradient-themes** for 40 ready-made gradient and pastel backgrounds.
+
+| Project | What it is |
+| --- | --- |
+| [entity-group-card](https://github.com/mycrouch/entity-group-card) | Group any device's entities as a row list or chip grid |
+| [pro-v-weather-card](https://github.com/mycrouch/pro-v-weather-card) | Weather-station console — clock, moon, forecast, UV, solar, wind |
+| [weather-station-card](https://github.com/mycrouch/weather-station-card) | LCD-console weather station with backlight themes |
+| [airtouch-card](https://github.com/mycrouch/airtouch-card) | AirTouch 4/5 AC + zone control |
+| **sensibo-thermostat-card** (this card) | Sensibo thermostat with mode-coloured backgrounds |
+| [ecovacs-vacuum-card](https://github.com/mycrouch/ecovacs-vacuum-card) | Ecovacs/Deebot vacuum with area cleaning |
+| [gradient-themes](https://github.com/mycrouch/gradient-themes) | 40 gradient + pastel dashboard themes |
 
 ## License
 
