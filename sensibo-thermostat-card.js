@@ -1,13 +1,23 @@
-/* sensibo-thermostat-card v1.6.2
+/* sensibo-thermostat-card v1.7.0
  * Thermostat-style card for Sensibo devices. Pastel mode-coloured background,
  * dedicated power button, mode buttons ("Auto" label for heat_cool), fan-speed
  * and timer dropdowns side by side, native Sensibo off-timer with countdown.
  * Timer dropdown only shows while powered on; arms at power-on with the
  * configured start value. DOM is built once and updated in place (no rebuilds).
- * Config (GUI editable): entity, name, default_minutes, interval_minutes, max_minutes.
+ *
+ * v1.7.0 adds Climate Assist: a toggle bound to the Sensibo Climate React
+ * switch (shared with the Sensibo app) that drives a local HA "Climate React"
+ * engine. While Assist is on the card presents the AC as logically ON (power
+ * lit, mode colour held) even when the engine has cycled the physical unit off,
+ * with an "Assist · cooling / idle" indicator. Low/high thresholds are shown
+ * and adjustable in 0.5° steps beside the toggle.
+ *
+ * Config (GUI editable): entity, name, style, default_minutes, interval_minutes,
+ * max_minutes, react_switch, react_low, react_high.
  * YAML extras: timer_options:[minutes], timer_switch, timer_end, colors:{mode:css}.
  */
 (() => {
+  const VERSION = "1.7.0";
   const ICONS = {
     cool: "mdi:snowflake",
     heat: "mdi:fire",
@@ -15,6 +25,15 @@
     auto: "mdi:thermostat-auto",
     dry: "mdi:water-percent",
     fan_only: "mdi:fan",
+  };
+  // Physical running verb shown in the Assist indicator
+  const ACTIVITY = {
+    cool: "cooling",
+    heat: "heating",
+    dry: "drying",
+    fan_only: "fan",
+    heat_cool: "auto",
+    auto: "auto",
   };
   const modeLabel = (m) =>
     m === "heat_cool" ? "Auto" : (m || "").replace("_", " ");
@@ -129,6 +148,14 @@
         style: "pastel",
         timer_switch: `switch.${slug}_timer`,
         timer_end: `sensor.${slug}_timer_end_time`,
+        // Climate Assist wiring, derived from the entity slug like the timer
+        // entities. The react switch is shared with the Sensibo app; the
+        // thresholds default to the integration's number entities but can be
+        // pointed at input_number helpers (the setup used on setups without a
+        // Climate React subscription). Any of these can be overridden.
+        react_switch: `switch.${slug}_climate_react`,
+        react_low: `number.${slug}_climate_react_low_temperature_threshold`,
+        react_high: `number.${slug}_climate_react_high_temperature_threshold`,
         ...config,
       };
       if (this._c.style === "light") this._c.style = "pastel"; // airtouch-card alias
@@ -173,13 +200,25 @@
     _st() {
       return this._hass?.states[this._c.entity];
     }
+    _assistOn() {
+      const s = this._hass?.states[this._c.react_switch];
+      return s?.state === "on";
+    }
     _on() {
       // Optimistic windows: after a power press, hold the target state for a
       // few seconds so integration state-bounce (on -> stale off -> on) doesn't flicker the card
-      if (this._optOffUntil && Date.now() < this._optOffUntil) return false;
+      if (this._optOffUntil && Date.now() < this._optOffUntil) return false; // card power-off always wins
       if (this._optOnUntil && Date.now() < this._optOnUntil) return true;
+      // Climate Assist forces logical ON: while the react switch is on the unit
+      // is "on" from the user's point of view even when the engine has cycled
+      // the physical AC off between threshold crossings.
+      if (this._assistOn()) return true;
       const st = this._st();
       return st && st.state !== "off";
+    }
+    _writable(ent) {
+      const d = (ent || "").split(".")[0];
+      return d === "input_number" || d === "number";
     }
     _timerActive() {
       const sw = this._hass?.states[this._c.timer_switch];
@@ -245,6 +284,7 @@
   .stepper{display:flex;align-items:center;gap:14px;}
   .rbtn{width:36px;height:36px;border-radius:50%;border:none;background:var(--stc-btn-bg);color:var(--stc-fg);font-size:1.25rem;cursor:pointer;display:flex;align-items:center;justify-content:center;}
   .rbtn:active{filter:brightness(1.3);}
+  .rbtn.sm{width:30px;height:30px;font-size:1.1rem;}
   .sval{min-width:52px;text-align:center;font-size:1.25rem;font-weight:500;font-variant-numeric:tabular-nums;}
   .cur{font-size:.85rem;color:var(--stc-sub);}
   .modes{margin-top:16px;}
@@ -257,6 +297,17 @@
   .dd{flex:1;background:var(--stc-surface);border-radius:12px;padding:10px 12px;}
   .dd .lbl{display:block;margin-bottom:6px;}
   select{width:100%;border:none;border-radius:8px;padding:8px 10px;font-size:.95rem;background:var(--stc-select-bg);color:var(--stc-fg);cursor:pointer;outline:none;appearance:auto;}
+  .assist{margin-top:16px;background:var(--stc-surface);border-radius:12px;padding:10px 14px;}
+  .ahdr{display:flex;align-items:center;gap:10px;}
+  .astate{flex:1;font-size:.8rem;color:var(--stc-sub);}
+  .atgl{width:46px;height:26px;border-radius:13px;border:none;cursor:pointer;background:var(--stc-btn-bg);position:relative;flex:none;transition:background .3s;padding:0;}
+  .atgl.on{background:var(--stc-sel-bg);}
+  .aknob{position:absolute;top:3px;left:3px;width:20px;height:20px;border-radius:50%;background:#fff;box-shadow:0 1px 3px rgba(0,0,0,.35);transition:transform .3s;}
+  .atgl.on .aknob{transform:translateX(20px);}
+  .threshrow{display:flex;gap:10px;margin-top:12px;}
+  .thresh{flex:1;display:flex;align-items:center;justify-content:center;gap:8px;}
+  .tlbl{font-size:.72rem;letter-spacing:.1em;text-transform:uppercase;color:var(--stc-sub);}
+  .tval{min-width:44px;text-align:center;font-size:1.05rem;font-weight:500;font-variant-numeric:tabular-nums;}
 </style>
 <ha-card>
   <div class="hdr">
@@ -305,6 +356,28 @@
       </select>
     </div>
   </div>
+
+  <div class="assist" id="assist">
+    <div class="ahdr">
+      <span class="lbl">Climate Assist</span>
+      <span class="astate" id="astate"></span>
+      <button type="button" class="atgl" id="atgl" role="switch" aria-checked="false" title="Climate Assist"><span class="aknob"></span></button>
+    </div>
+    <div class="threshrow" id="threshrow">
+      <div class="thresh">
+        <span class="tlbl">Low</span>
+        <button type="button" class="rbtn sm" id="lodn">−</button>
+        <span class="tval" id="loval">—</span>
+        <button type="button" class="rbtn sm" id="loup">+</button>
+      </div>
+      <div class="thresh">
+        <span class="tlbl">High</span>
+        <button type="button" class="rbtn sm" id="hidn">−</button>
+        <span class="tval" id="hival">—</span>
+        <button type="button" class="rbtn sm" id="hiup">+</button>
+      </div>
+    </div>
+  </div>
 </ha-card>`;
 
       const $ = (id) => this.shadowRoot.getElementById(id);
@@ -324,6 +397,16 @@
         timersel: $("timersel"),
         tup: $("tup"),
         tdn: $("tdn"),
+        assist: $("assist"),
+        astate: $("astate"),
+        atgl: $("atgl"),
+        threshrow: $("threshrow"),
+        loval: $("loval"),
+        hival: $("hival"),
+        loup: $("loup"),
+        lodn: $("lodn"),
+        hiup: $("hiup"),
+        hidn: $("hidn"),
       };
 
       this._el.pwr.onclick = () => this._power();
@@ -335,6 +418,11 @@
       this._el.fansel.onchange = (e) => this._pickFan(e.target.value);
       this._el.timersel.onchange = (e) =>
         this._pickTimer(parseInt(e.target.value, 10));
+      this._el.atgl.onclick = () => this._toggleAssist();
+      this._el.loup.onclick = () => this._nudgeThresh("low", +1);
+      this._el.lodn.onclick = () => this._nudgeThresh("low", -1);
+      this._el.hiup.onclick = () => this._nudgeThresh("high", +1);
+      this._el.hidn.onclick = () => this._nudgeThresh("high", -1);
 
       this._built = true;
     }
@@ -416,6 +504,46 @@
       } else {
         this._updateCount();
       }
+
+      this._updateAssist(on);
+    }
+
+    _updateAssist(on) {
+      const e = this._el;
+      const reactSt = this._hass?.states[this._c.react_switch];
+      const assistOn = reactSt?.state === "on";
+      // Show the Assist block whenever there's a react switch to bind to and the
+      // unit is logically on (which includes assist-on). Absent switch = the
+      // card behaves exactly as before (back-compat).
+      const show = !!reactSt && (on || assistOn);
+      e.assist.style.display = show ? "" : "none";
+      if (!show) return;
+
+      e.atgl.classList.toggle("on", assistOn);
+      e.atgl.setAttribute("aria-checked", assistOn ? "true" : "false");
+
+      const pst = this._st()?.state;
+      const physOn = pst && pst !== "off";
+      e.astate.textContent = assistOn
+        ? "Assist · " + (physOn ? ACTIVITY[pst] || "active" : "idle")
+        : "Assist off";
+
+      const loEnt = this._hass?.states[this._c.react_low];
+      const hiEnt = this._hass?.states[this._c.react_high];
+      const showThresh = assistOn && (loEnt || hiEnt);
+      e.threshrow.style.display = showThresh ? "" : "none";
+      if (!showThresh) return;
+
+      const loW = !!loEnt && this._writable(this._c.react_low);
+      const hiW = !!hiEnt && this._writable(this._c.react_high);
+      const lv = loEnt ? parseFloat(loEnt.state) : NaN;
+      const hv = hiEnt ? parseFloat(hiEnt.state) : NaN;
+      e.loval.textContent = isNaN(lv) ? "—" : lv + "°";
+      e.hival.textContent = isNaN(hv) ? "—" : hv + "°";
+      e.loup.style.display = loW ? "" : "none";
+      e.lodn.style.display = loW ? "" : "none";
+      e.hiup.style.display = hiW ? "" : "none";
+      e.hidn.style.display = hiW ? "" : "none";
     }
 
     _ensureTimerOption(mins) {
@@ -445,15 +573,48 @@
       });
     }
 
+    _toggleAssist() {
+      // Bound to the Sensibo Climate React switch — shared state with the
+      // Sensibo app and the driver for the local HA Climate Assist engine.
+      const on = this._assistOn();
+      this._svc("switch", on ? "turn_off" : "turn_on", {
+        entity_id: this._c.react_switch,
+      });
+    }
+
+    _nudgeThresh(which, dir) {
+      const ent = which === "low" ? this._c.react_low : this._c.react_high;
+      if (!this._writable(ent)) return;
+      const st = this._hass?.states[ent];
+      if (!st) return;
+      const cur = parseFloat(st.state);
+      if (isNaN(cur)) return;
+      // 0.5° steps, clamped to the same range as the climate entity
+      const a = this._st()?.attributes || {};
+      const lo = a.min_temp ?? 8;
+      const hi = a.max_temp ?? 31;
+      let v = Math.round((cur + dir * 0.5) * 2) / 2;
+      v = Math.min(hi, Math.max(lo, v));
+      const domain = ent.split(".")[0];
+      this._svc(domain, "set_value", { entity_id: ent, value: v });
+    }
+
     _power() {
       if (this._on()) {
-        // Manual off: reset timer to off
+        // Manual off: turn Climate Assist off FIRST (so the engine doesn't
+        // re-power the unit), then the AC, then reset the timer. Same
+        // single-beep discipline — set_hvac_mode off is a single API call, and
+        // it's only sent if the physical unit isn't already off (it can be off
+        // while logically on when Assist has cycled it).
         this._optOffUntil = Date.now() + 5000;
         this._optOnUntil = 0;
-        this._svc("climate", "set_hvac_mode", {
-          entity_id: this._c.entity,
-          hvac_mode: "off",
-        });
+        if (this._assistOn())
+          this._svc("switch", "turn_off", { entity_id: this._c.react_switch });
+        if (this._st()?.state !== "off")
+          this._svc("climate", "set_hvac_mode", {
+            entity_id: this._c.entity,
+            hvac_mode: "off",
+          });
         this._cancelTimer();
         this._pending = 0;
         this._update();
@@ -593,6 +754,9 @@
             default_minutes: "Timer start value at power-on (minutes, 0 = off)",
             interval_minutes: "Timer dropdown interval (minutes)",
             max_minutes: "Timer dropdown maximum (minutes)",
+            react_switch: "Climate Assist switch (Sensibo Climate React)",
+            react_low: "Assist low threshold entity (number/input_number)",
+            react_high: "Assist high threshold entity (number/input_number)",
           }[s.name] || s.name);
         this._form.schema = [
           {
@@ -625,6 +789,18 @@
           {
             name: "max_minutes",
             selector: { number: { min: 30, step: 30, mode: "box" } },
+          },
+          {
+            name: "react_switch",
+            selector: { entity: { domain: "switch" } },
+          },
+          {
+            name: "react_low",
+            selector: { entity: { domain: ["number", "input_number", "sensor"] } },
+          },
+          {
+            name: "react_high",
+            selector: { entity: { domain: ["number", "input_number", "sensor"] } },
           },
         ];
         this._form.addEventListener("value-changed", (ev) => {
@@ -663,7 +839,14 @@
     type: "sensibo-thermostat-card",
     name: "Sensibo Thermostat Card",
     description:
-      "Thermostat-style Sensibo card with power button, mode buttons, fan/timer dropdowns and pastel mode-coloured background.",
+      "Thermostat-style Sensibo card with power button, mode buttons, fan/timer dropdowns, pastel mode-coloured background and a local Climate Assist (Climate React) toggle.",
     preview: true,
+    documentationURL:
+      "https://github.com/mycrouch/sensibo-thermostat-card",
   });
+  console.info(
+    `%c SENSIBO-THERMOSTAT-CARD %c v${VERSION} `,
+    "color:#fff;background:#0b4f79;font-weight:700;",
+    "color:#0b4f79;background:#d9ecff;font-weight:700;"
+  );
 })();
