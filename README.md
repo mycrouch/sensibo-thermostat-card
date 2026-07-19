@@ -31,14 +31,14 @@ The built-in thermostat card can't show Sensibo's timer, gives no at-a-glance in
 
 ### Climate Assist — a local Climate React
 
-Sensibo's own Climate React (keep the room inside a temperature band by cycling the AC) is now a paid subscription. Climate Assist re-creates it **locally in Home Assistant**, for free, with a set of automations you build once — the card just gives you the switch and the thresholds.
+Sensibo's own Climate React (keep the room inside a temperature band by cycling the AC) is now a paid subscription. Climate Assist re-creates it **locally in Home Assistant**, for free, with a set of automations you build once — the card just gives you the toggle and the thresholds. Everything lives in HA (an `input_boolean` toggle is recommended), so there's no dependency on Sensibo's cloud or app.
 
-- **One-tap toggle**, shown beside the controls whenever the unit is on. It's bound to the Sensibo **Climate React switch** (`switch.*_climate_react`), so flipping it here or in the Sensibo app is the same state — the two stay in sync.
-- **Low / high thresholds** appear while Assist is on and adjust in 0.5° steps straight from the card, writing to the threshold entities so the automation and the app read the same numbers.
+- **One-tap toggle**, shown beside the controls whenever the unit is on. It's bound to any HA toggleable entity — an **`input_boolean` is recommended** so the whole feature lives in Home Assistant with no dependency on Sensibo's cloud or app. (It toggles via `homeassistant.turn_on/off`, so a native `switch.*_climate_react` still works if you prefer.)
+- **Low / high thresholds** appear while Assist is on and adjust in 0.5° steps straight from the card, writing to the threshold entities so the automation reads the same numbers.
 - **Logical on-state.** While Assist is on the card presents the AC as **on** — power button lit, mode colour held — even when the engine has cycled the physical compressor off between threshold crossings. A subtle indicator shows what the hardware is actually doing: **Assist · cooling** vs **Assist · idle**.
 - **Power-off does the right thing.** Tapping power turns Assist off *first* (so the engine can't immediately switch the unit back on) and then the AC — one beep, no fight.
 
-The card supplies the controls; the cycling logic lives in HA automations (one per AC) that you set up separately — see [Climate Assist setup](#climate-assist-setup) below. If you don't wire a react switch, the toggle simply doesn't appear and the card behaves exactly as it always has.
+The card supplies the controls; the cycling logic lives in HA automations (one per AC) that you set up separately — see [Climate Assist setup](#climate-assist-setup) below. If you don't wire a toggle entity, the toggle simply doesn't appear and the card behaves exactly as it always has.
 
 ### Looks
 
@@ -86,7 +86,7 @@ default_minutes: 60        # optional, timer armed at power-on (0 = none)
 interval_minutes: 10       # optional, timer dropdown steps
 max_minutes: 240           # optional, timer dropdown maximum
 # Climate Assist (all optional; derived from the entity slug by default)
-react_switch: switch.dining_room_sensibo_living_area_climate_react
+react_switch: input_boolean.climate_assist_living_area
 react_low: input_number.climate_assist_living_area_low
 react_high: input_number.climate_assist_living_area_high
 ```
@@ -102,7 +102,7 @@ react_high: input_number.climate_assist_living_area_high
 | `timer_options` | generated | Explicit list of minute values (overrides interval/max) |
 | `timer_switch` | derived | Override the `switch.*_timer` entity |
 | `timer_end` | derived | Override the `sensor.*_timer_end_time` entity |
-| `react_switch` | `switch.*_climate_react` | Switch the Climate Assist toggle binds to (shared with the Sensibo app) |
+| `react_switch` | `switch.*_climate_react` | Toggleable entity the Climate Assist toggle binds to. An `input_boolean` is recommended (keeps everything in HA); the derived native react switch is only the default for generic setups |
 | `react_low` | `number.*_climate_react_low_temperature_threshold` | Low-threshold entity; point at an `input_number` when using local helpers |
 | `react_high` | `number.*_climate_react_high_temperature_threshold` | High-threshold entity; point at an `input_number` when using local helpers |
 | `colors` | built-in | Per-mode CSS background overrides, e.g. `heat: "linear-gradient(145deg,#fdd,#fba)"` |
@@ -119,16 +119,16 @@ Powering on from the Sensibo app or an IR remote does not arm the timer — if y
 
 The card renders the Climate Assist controls, but the actual thermostat cycling is done by Home Assistant automations you create once per AC. The card only needs three things to exist:
 
-1. **A toggle switch** — the Sensibo integration's `switch.*_climate_react` works perfectly. Without a Climate React subscription the native switch does nothing on Sensibo's side, so it's free to use as a plain on/off flag that's shared with the app. (`react_switch`.)
+1. **A toggle entity** — create an `input_boolean` per AC (recommended) so the whole feature lives in Home Assistant, independent of Sensibo's cloud and app. The card toggles it with `homeassistant.turn_on/off`, so any toggleable entity works — a native `switch.*_climate_react` is fine too, but keep it **off** on the Sensibo side so the app never fights the HA engine. (`react_switch`.)
 2. **Two writable thresholds** — Sensibo exposes the Climate React thresholds as **read-only** `sensor.*_climate_react_*_temperature_threshold` entities, so create an `input_number` per AC for the low and high setpoints (0.5° step) and point `react_low` / `react_high` at them.
-3. **An engine automation** per AC that, while the react switch is on, watches the Sensibo climate entity's `current_temperature` and:
+3. **An engine automation** per AC that, while the toggle is on, watches the Sensibo climate entity's `current_temperature` and:
    - powers the unit **on** with a single `sensibo.full_state` call (one IR blast, one beep) when the room crosses the far threshold, and
    - powers it **off** with `climate.set_hvac_mode: off` when it reaches the near threshold,
    with a `for:` dwell (e.g. 5 minutes) on the temperature triggers for compressor protection, `mode: single`, `max_exceeded: silent`.
 
-Pair it with a small companion automation so that if the AC is switched off by anything *other* than the engine (the Sensibo off-timer, a manual/app power-off), the react switch is turned off too — distinguish the engine's own power-off via the state-change context (`trigger.to_state.context.parent_id`) so normal cycling isn't interrupted.
+Pair it with a small companion automation so that if the AC is switched off by anything *other* than the engine (the Sensibo off-timer, a manual/app power-off), the toggle is turned off too — distinguish the engine's own power-off via the state-change context (`trigger.to_state.context.parent_id`) so normal cycling isn't interrupted.
 
-> **If you later subscribe to Sensibo Climate React**, disable the HA engine automations (or the native React) — otherwise both engines will act on the same AC and fight each other.
+> **If you later subscribe to Sensibo Climate React**, keep the native `switch.*_climate_react` **off** and don't bind the card to it — otherwise the Sensibo engine and the HA engine will act on the same AC and fight each other. With an `input_boolean` toggle the two are fully decoupled.
 
 ## The mycrouch card collection
 

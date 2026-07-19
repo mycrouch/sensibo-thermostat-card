@@ -1,13 +1,15 @@
-/* sensibo-thermostat-card v1.7.0
+/* sensibo-thermostat-card v1.7.1
  * Thermostat-style card for Sensibo devices. Pastel mode-coloured background,
  * dedicated power button, mode buttons ("Auto" label for heat_cool), fan-speed
  * and timer dropdowns side by side, native Sensibo off-timer with countdown.
  * Timer dropdown only shows while powered on; arms at power-on with the
  * configured start value. DOM is built once and updated in place (no rebuilds).
  *
- * v1.7.0 adds Climate Assist: a toggle bound to the Sensibo Climate React
- * switch (shared with the Sensibo app) that drives a local HA "Climate React"
- * engine. While Assist is on the card presents the AC as logically ON (power
+ * Climate Assist: a toggle bound to any HA toggleable entity (input_boolean
+ * recommended, or the native react switch) that drives a local HA "Climate
+ * React" engine — no Sensibo subscription or app sync needed. v1.7.1 makes the
+ * toggle domain-agnostic (homeassistant.turn_on/off) so it works with an
+ * input_boolean. While Assist is on the card presents the AC as logically ON (power
  * lit, mode colour held) even when the engine has cycled the physical unit off,
  * with an "Assist · cooling / idle" indicator. Low/high thresholds are shown
  * and adjustable in 0.5° steps beside the toggle.
@@ -17,7 +19,7 @@
  * YAML extras: timer_options:[minutes], timer_switch, timer_end, colors:{mode:css}.
  */
 (() => {
-  const VERSION = "1.7.0";
+  const VERSION = "1.7.1";
   const ICONS = {
     cool: "mdi:snowflake",
     heat: "mdi:fire",
@@ -574,10 +576,10 @@
     }
 
     _toggleAssist() {
-      // Bound to the Sensibo Climate React switch — shared state with the
-      // Sensibo app and the driver for the local HA Climate Assist engine.
+      // Toggle the Climate Assist entity (input_boolean or switch) via the
+      // domain-agnostic homeassistant service so any toggleable domain works.
       const on = this._assistOn();
-      this._svc("switch", on ? "turn_off" : "turn_on", {
+      this._svc("homeassistant", on ? "turn_off" : "turn_on", {
         entity_id: this._c.react_switch,
       });
     }
@@ -609,7 +611,9 @@
         this._optOffUntil = Date.now() + 5000;
         this._optOnUntil = 0;
         if (this._assistOn())
-          this._svc("switch", "turn_off", { entity_id: this._c.react_switch });
+          this._svc("homeassistant", "turn_off", {
+            entity_id: this._c.react_switch,
+          });
         if (this._st()?.state !== "off")
           this._svc("climate", "set_hvac_mode", {
             entity_id: this._c.entity,
@@ -754,7 +758,7 @@
             default_minutes: "Timer start value at power-on (minutes, 0 = off)",
             interval_minutes: "Timer dropdown interval (minutes)",
             max_minutes: "Timer dropdown maximum (minutes)",
-            react_switch: "Climate Assist switch (Sensibo Climate React)",
+            react_switch: "Climate Assist toggle (input_boolean or switch)",
             react_low: "Assist low threshold entity (number/input_number)",
             react_high: "Assist high threshold entity (number/input_number)",
           }[s.name] || s.name);
@@ -792,7 +796,7 @@
           },
           {
             name: "react_switch",
-            selector: { entity: { domain: "switch" } },
+            selector: { entity: { domain: ["input_boolean", "switch"] } },
           },
           {
             name: "react_low",
