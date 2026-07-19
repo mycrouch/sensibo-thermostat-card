@@ -1,4 +1,4 @@
-/* sensibo-thermostat-card v1.7.1
+/* sensibo-thermostat-card v1.8.0
  * Thermostat-style card for Sensibo devices. Pastel mode-coloured background,
  * dedicated power button, mode buttons ("Auto" label for heat_cool), fan-speed
  * and timer dropdowns side by side, native Sensibo off-timer with countdown.
@@ -14,12 +14,17 @@
  * with an "Assist · cooling / idle" indicator. Low/high thresholds are shown
  * and adjustable in 0.5° steps beside the toggle.
  *
- * Config (GUI editable): entity, name, style, default_minutes, interval_minutes,
- * max_minutes, react_switch, react_low, react_high.
+ * Room sensor override (v1.8.0): optional temp_sensor / humidity_sensor point the
+ * displayed current temperature + humidity at a better-placed sensor entity
+ * instead of the Sensibo climate attributes. Absent = Sensibo attributes
+ * (back-compat); an unavailable/unknown sensor falls back to the Sensibo value.
+ *
+ * Config (GUI editable): entity, name, temp_sensor, humidity_sensor, style,
+ * default_minutes, interval_minutes, max_minutes, react_switch, react_low, react_high.
  * YAML extras: timer_options:[minutes], timer_switch, timer_end, colors:{mode:css}.
  */
 (() => {
-  const VERSION = "1.7.1";
+  const VERSION = "1.8.0";
   const ICONS = {
     cool: "mdi:snowflake",
     heat: "mdi:fire",
@@ -221,6 +226,19 @@
     _writable(ent) {
       const d = (ent || "").split(".")[0];
       return d === "input_number" || d === "number";
+    }
+    // Read a numeric value from an optional override sensor, falling back to the
+    // Sensibo attribute when the sensor is absent/unavailable/unknown/non-numeric.
+    // Read fresh from hass on every _update() so overrides stay live.
+    _sensorVal(ent, fallback) {
+      if (!ent) return fallback;
+      const s = this._hass?.states[ent];
+      if (!s) return fallback;
+      const v = s.state;
+      if (v == null || v === "" || v === "unknown" || v === "unavailable")
+        return fallback;
+      const n = parseFloat(v);
+      return isNaN(n) ? fallback : n;
     }
     _timerActive() {
       const sw = this._hass?.states[this._c.timer_switch];
@@ -472,11 +490,13 @@
       e.setrow.style.display = hasTarget ? "" : "none";
       e.bigval.textContent = hasTarget ? a.temperature : "—";
       e.setval.textContent = hasTarget ? a.temperature + "°" : "—";
+      // Displayed current temp/humidity come from the optional override sensors
+      // when set, else the Sensibo climate attributes (back-compat).
+      const curTemp = this._sensorVal(this._c.temp_sensor, a.current_temperature);
+      const curHum = this._sensorVal(this._c.humidity_sensor, a.current_humidity);
       e.cur.textContent =
-        (a.current_temperature != null ? a.current_temperature + "°" : "") +
-        (a.current_humidity != null
-          ? " · " + Math.round(a.current_humidity) + "%"
-          : "");
+        (curTemp != null ? curTemp + "°" : "") +
+        (curHum != null ? " · " + Math.round(curHum) + "%" : "");
 
       e.modelbl.textContent = "Mode · " + modeLabel(this._selMode);
       e.modeBtns.forEach((b) =>
@@ -754,6 +774,8 @@
           ({
             entity: "Climate entity (Sensibo)",
             name: "Name (optional)",
+            temp_sensor: "Room temperature sensor (optional, defaults to Sensibo)",
+            humidity_sensor: "Room humidity sensor (optional, defaults to Sensibo)",
             style: "Style",
             default_minutes: "Timer start value at power-on (minutes, 0 = off)",
             interval_minutes: "Timer dropdown interval (minutes)",
@@ -769,6 +791,18 @@
             selector: { entity: { domain: "climate" } },
           },
           { name: "name", selector: { text: {} } },
+          {
+            name: "temp_sensor",
+            selector: {
+              entity: { domain: "sensor", device_class: "temperature" },
+            },
+          },
+          {
+            name: "humidity_sensor",
+            selector: {
+              entity: { domain: "sensor", device_class: "humidity" },
+            },
+          },
           {
             name: "style",
             selector: {

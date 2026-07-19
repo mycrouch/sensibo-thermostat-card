@@ -20,6 +20,7 @@ The built-in thermostat card can't show Sensibo's timer, gives no at-a-glance in
 - **Mode buttons.** A round-button row for every HVAC mode the device reports — cool, heat, dry, fan-only, and heat/cool (labelled **Auto**). The section label always shows the current selection.
 - **Fan speed dropdown.** Built from the device's actual `fan_modes` (quiet, low, medium, medium-high, high, auto, strong — whatever your unit supports).
 - **Target temperature** with +/− controls that respect the device's min/max and step, plus live current temperature and humidity readouts.
+- **Room sensor override (optional).** Point the current temperature and/or humidity readout at a better-placed sensor entity with `temp_sensor` / `humidity_sensor`; leave them unset and the card reads the Sensibo's own `current_temperature` / `current_humidity` as always. If a chosen sensor goes unavailable the card falls back to the Sensibo value.
 
 ### The off-timer
 
@@ -81,6 +82,8 @@ Everything is configurable in the GUI editor (**Add card → Sensibo Thermostat 
 type: custom:sensibo-thermostat-card
 entity: climate.dining_room_sensibo_living_area
 name: Living Area          # optional, defaults to the entity's friendly name
+temp_sensor: sensor.living_room_temperature      # optional, room temp source (defaults to Sensibo)
+humidity_sensor: sensor.living_room_humidity     # optional, room humidity source (defaults to Sensibo)
 style: pastel              # optional: default | bold | pastel
 default_minutes: 60        # optional, timer armed at power-on (0 = none)
 interval_minutes: 10       # optional, timer dropdown steps
@@ -95,6 +98,8 @@ react_high: input_number.climate_assist_living_area_high
 | --- | --- | --- |
 | `entity` | required | Sensibo `climate` entity |
 | `name` | friendly name | Card title |
+| `temp_sensor` | Sensibo attr | Optional `sensor` entity for the displayed **current temperature**; unset = the Sensibo `current_temperature`. Falls back to the Sensibo value if unavailable |
+| `humidity_sensor` | Sensibo attr | Optional `sensor` entity for the displayed **current humidity**; unset = the Sensibo `current_humidity`. Falls back to the Sensibo value if unavailable |
 | `style` | `pastel` | `default` (follows theme), `bold`, or `pastel` (`light` accepted as an alias) |
 | `default_minutes` | `60` | Timer value armed at power-on, in minutes; `0` = no timer |
 | `interval_minutes` | `10` | Timer dropdown interval |
@@ -127,6 +132,8 @@ The card renders the Climate Assist controls, but the actual thermostat cycling 
    with a `for:` dwell (e.g. 5 minutes) on the temperature triggers for compressor protection, `mode: single`, `max_exceeded: silent`.
 
 Pair it with a small companion automation so that if the AC is switched off by anything *other* than the engine (the Sensibo off-timer, a manual/app power-off), the toggle is turned off too — distinguish the engine's own power-off via the state-change context (`trigger.to_state.context.parent_id`) so normal cycling isn't interrupted.
+
+> **Keep the card and the engine on the same sensor.** If you set `temp_sensor` (or `humidity_sensor`) to override the room source on a card, re-point that room's engine automation to trigger on the same sensor — a `numeric_state` trigger on the sensor entity rather than on the climate entity's `current_temperature` attribute. Otherwise the card displays one temperature while the engine cycles the AC on another.
 
 > **If you later subscribe to Sensibo Climate React**, keep the native `switch.*_climate_react` **off** and don't bind the card to it — otherwise the Sensibo engine and the HA engine will act on the same AC and fight each other. With an `input_boolean` toggle the two are fully decoupled.
 
