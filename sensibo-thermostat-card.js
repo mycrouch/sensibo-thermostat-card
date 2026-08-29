@@ -24,7 +24,7 @@
  * YAML extras: timer_options:[minutes], timer_switch, timer_end, colors:{mode:css}.
  */
 (() => {
-  const VERSION = "1.8.0";
+  const VERSION = "1.8.1";
   const ICONS = {
     cool: "mdi:snowflake",
     heat: "mdi:fire",
@@ -42,6 +42,16 @@
     heat_cool: "auto",
     auto: "auto",
   };
+  /* Escape freeform text before it goes into innerHTML: config values and
+     state attribute values such as hvac_modes and fan_modes entries. */
+  const esc = (v) =>
+    String(v ?? "")
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;")
+      .replace(/'/g, "&#39;");
+
   const modeLabel = (m) =>
     m === "heat_cool" ? "Auto" : (m || "").replace("_", " ");
   const fanLabel = (f) => (f || "").replace("_", " ");
@@ -269,7 +279,7 @@
       const st = this._st();
       if (!st) {
         if (!this._errShown) {
-          this.shadowRoot.innerHTML = `<ha-card style="padding:16px">Entity ${this._c.entity} not found</ha-card>`;
+          this.shadowRoot.innerHTML = `<ha-card style="padding:16px">Entity ${esc(this._c.entity)} not found</ha-card>`;
           this._errShown = true;
           this._built = false;
         }
@@ -352,7 +362,7 @@
       ${modes
         .map(
           (m) =>
-            `<button type="button" class="mbtn mode" data-v="${m}" title="${modeLabel(m)}"><ha-icon icon="${ICONS[m]}"></ha-icon></button>`
+            `<button type="button" class="mbtn mode" data-v="${esc(m)}" title="${esc(modeLabel(m))}"><ha-icon icon="${ICONS[m] || ""}"></ha-icon></button>`
         )
         .join("")}
     </div>
@@ -363,7 +373,7 @@
       <span class="lbl">Fan speed</span>
       <select id="fansel">
         ${fans
-          .map((f) => `<option value="${f}">${fanLabel(f)}</option>`)
+          .map((f) => `<option value="${esc(f)}">${esc(fanLabel(f))}</option>`)
           .join("")}
       </select>
     </div>
@@ -508,7 +518,7 @@
       if (fansKey !== this._fansKey && this.shadowRoot.activeElement !== e.fansel) {
         this._fansKey = fansKey;
         e.fansel.innerHTML = (a.fan_modes || [])
-          .map((f) => `<option value="${f}">${fanLabel(f)}</option>`)
+          .map((f) => `<option value="${esc(f)}">${esc(fanLabel(f))}</option>`)
           .join("");
       }
       const selFan = on ? a.fan_mode : this._selFan || a.fan_mode;
@@ -867,21 +877,26 @@
     }
   }
 
-  customElements.define("sensibo-thermostat-card", SensiboThermostatCard);
-  customElements.define(
-    "sensibo-thermostat-card-editor",
-    SensiboThermostatCardEditor
-  );
+  if (!customElements.get("sensibo-thermostat-card")) {
+    customElements.define("sensibo-thermostat-card", SensiboThermostatCard);
+  }
+  if (!customElements.get("sensibo-thermostat-card-editor")) {
+    customElements.define(
+      "sensibo-thermostat-card-editor",
+      SensiboThermostatCardEditor
+    );
+  }
   window.customCards = window.customCards || [];
-  window.customCards.push({
-    type: "sensibo-thermostat-card",
-    name: "Sensibo Thermostat Card",
-    description:
-      "Thermostat-style Sensibo card with power button, mode buttons, fan/timer dropdowns, pastel mode-coloured background and a local Climate Assist (Climate React) toggle.",
-    preview: true,
-    documentationURL:
-      "https://github.com/mycrouch/sensibo-thermostat-card",
-  });
+  if (!window.customCards.some((c) => c.type === "sensibo-thermostat-card")) {
+    window.customCards.push({
+      type: "sensibo-thermostat-card",
+      name: "Sensibo Thermostat Card",
+      description:
+        "Thermostat-style Sensibo card with power button, mode buttons, fan/timer dropdowns, pastel mode-coloured background and a local Climate Assist (Climate React) toggle.",
+      preview: true,
+      documentationURL: "https://github.com/mycrouch/sensibo-thermostat-card",
+    });
+  }
   console.info(
     `%c SENSIBO-THERMOSTAT-CARD %c v${VERSION} `,
     "color:#fff;background:#0b4f79;font-weight:700;",
