@@ -24,7 +24,7 @@
  * YAML extras: timer_options:[minutes], timer_switch, timer_end, colors:{mode:css}.
  */
 (() => {
-  const VERSION = "1.8.1";
+  const VERSION = "1.8.2";
   const ICONS = {
     cool: "mdi:snowflake",
     heat: "mdi:fire",
@@ -52,9 +52,12 @@
       .replace(/"/g, "&quot;")
       .replace(/'/g, "&#39;");
 
+  /* Coerce with String() before replacing: hvac_modes / fan_modes come from the
+     vendor cloud, and a non-string entry would otherwise throw a TypeError in
+     the render path and leave the card blank until the dashboard is reloaded. */
   const modeLabel = (m) =>
-    m === "heat_cool" ? "Auto" : (m || "").replace("_", " ");
-  const fanLabel = (f) => (f || "").replace("_", " ");
+    m === "heat_cool" ? "Auto" : String(m ?? "").replace("_", " ");
+  const fanLabel = (f) => String(f ?? "").replace("_", " ");
   const BG = {
     bold: {
       heat: "linear-gradient(160deg,#3b1006,#8a3413 55%,#c05621)",
