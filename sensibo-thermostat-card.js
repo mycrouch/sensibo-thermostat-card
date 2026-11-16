@@ -1,4 +1,4 @@
-/* sensibo-thermostat-card v1.8.0
+/* sensibo-thermostat-card v1.9.0
  * Thermostat-style card for Sensibo devices. Pastel mode-coloured background,
  * dedicated power button, mode buttons ("Auto" label for heat_cool), fan-speed
  * and timer dropdowns side by side, native Sensibo off-timer with countdown.
@@ -14,6 +14,14 @@
  * with an "Assist · cooling / idle" indicator. Low/high thresholds are shown
  * and adjustable in 0.5° steps beside the toggle.
  *
+ * Three-position Assist (v1.9.0): when react_switch is an input_select with
+ * off/react/dry options the toggle becomes an Off / React / Dry segmented
+ * control (Dry only shown if the select has a "dry" option AND the AC supports
+ * dry). React = cycle the unit on/off between thresholds; Dry = keep the unit
+ * on, switching to dry below the low threshold and back to cool above the
+ * high one. Written via input_select.select_option. A boolean/switch
+ * react_switch keeps the original on/off toggle (back-compat).
+ *
  * Room sensor override (v1.8.0): optional temp_sensor / humidity_sensor point the
  * displayed current temperature + humidity at a better-placed sensor entity
  * instead of the Sensibo climate attributes. Absent = Sensibo attributes
@@ -24,7 +32,13 @@
  * YAML extras: timer_options:[minutes], timer_switch, timer_end, colors:{mode:css}.
  */
 (() => {
-  const VERSION = "1.8.2";
+  const VERSION = "1.9.0";
+  // Assist positions offered by the segmented control (input_select mode)
+  const ASSIST_POS = [
+    { v: "off", label: "Off" },
+    { v: "react", label: "React" },
+    { v: "dry", label: "Dry" },
+  ];
   const ICONS = {
     cool: "mdi:snowflake",
     heat: "mdi:fire",
@@ -220,9 +234,41 @@
     _st() {
       return this._hass?.states[this._c.entity];
     }
-    _assistOn() {
+    // "select" when react_switch is an input_select/select (Off/React/Dry
+    // segmented control), otherwise "toggle" (input_boolean/switch on/off).
+    _assistKind() {
+      const d = (this._c.react_switch || "").split(".")[0];
+      return d === "input_select" || d === "select" ? "select" : "toggle";
+    }
+    // Current Assist position: "off" | "react" | "dry".
+    _assistPos() {
       const s = this._hass?.states[this._c.react_switch];
-      return s?.state === "on";
+      if (!s) return "off";
+      if (this._assistKind() === "toggle") return s.state === "on" ? "react" : "off";
+      const v = s.state;
+      if (v === "dry") return "dry";
+      if (v === "react") return "react";
+      return "off"; // off / unknown / unavailable
+    }
+    _assistOn() {
+      // Logical-on applies to both react and dry
+      return this._assistPos() !== "off";
+    }
+    // Write an Assist position. Selects use select_option; toggles use the
+    // domain-agnostic homeassistant.turn_on/off. Skips no-op writes.
+    _setAssist(pos) {
+      if (pos === this._assistPos()) return;
+      const ent = this._c.react_switch;
+      if (this._assistKind() === "select") {
+        this._svc(ent.split(".")[0], "select_option", {
+          entity_id: ent,
+          option: pos,
+        });
+      } else {
+        this._svc("homeassistant", pos === "off" ? "turn_off" : "turn_on", {
+          entity_id: ent,
+        });
+      }
     }
     _on() {
       // Optimistic windows: after a power press, hold the target state for a
@@ -332,7 +378,10 @@
   select{width:100%;border:none;border-radius:8px;padding:8px 10px;font-size:.95rem;background:var(--stc-select-bg);color:var(--stc-fg);cursor:pointer;outline:none;appearance:auto;}
   .assist{margin-top:16px;background:var(--stc-surface);border-radius:12px;padding:10px 14px;}
   .ahdr{display:flex;align-items:center;gap:10px;}
-  .astate{flex:1;font-size:.8rem;color:var(--stc-sub);}
+  .astate{flex:1;min-width:0;font-size:.8rem;color:var(--stc-sub);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  .aseg{display:flex;flex:none;gap:2px;padding:2px;border-radius:15px;background:var(--stc-btn-bg);}
+  .aseg button{border:none;cursor:pointer;background:transparent;color:var(--stc-btn-fg);font:inherit;font-size:.78rem;font-weight:500;padding:5px 11px;border-radius:13px;transition:background .3s,color .3s;}
+  .aseg button.sel{background:var(--stc-sel-bg);color:var(--stc-sel-fg);box-shadow:0 1px 4px rgba(0,0,0,.25);}
   .atgl{width:46px;height:26px;border-radius:13px;border:none;cursor:pointer;background:var(--stc-btn-bg);position:relative;flex:none;transition:background .3s;padding:0;}
   .atgl.on{background:var(--stc-sel-bg);}
   .aknob{position:absolute;top:3px;left:3px;width:20px;height:20px;border-radius:50%;background:#fff;box-shadow:0 1px 3px rgba(0,0,0,.35);transition:transform .3s;}
@@ -395,6 +444,12 @@
       <span class="lbl">Climate Assist</span>
       <span class="astate" id="astate"></span>
       <button type="button" class="atgl" id="atgl" role="switch" aria-checked="false" title="Climate Assist"><span class="aknob"></span></button>
+      <div class="aseg" id="aseg" role="radiogroup" aria-label="Climate Assist">
+        ${ASSIST_POS.map(
+          (p) =>
+            `<button type="button" role="radio" aria-checked="false" data-v="${p.v}">${p.label}</button>`
+        ).join("")}
+      </div>
     </div>
     <div class="threshrow" id="threshrow">
       <div class="thresh">
@@ -433,6 +488,8 @@
         assist: $("assist"),
         astate: $("astate"),
         atgl: $("atgl"),
+        aseg: $("aseg"),
+        segBtns: [...this.shadowRoot.querySelectorAll("#aseg button")],
         threshrow: $("threshrow"),
         loval: $("loval"),
         hival: $("hival"),
@@ -452,6 +509,9 @@
       this._el.timersel.onchange = (e) =>
         this._pickTimer(parseInt(e.target.value, 10));
       this._el.atgl.onclick = () => this._toggleAssist();
+      this._el.segBtns.forEach((b) => {
+        b.onclick = () => this._setAssist(b.dataset.v);
+      });
       this._el.loup.onclick = () => this._nudgeThresh("low", +1);
       this._el.lodn.onclick = () => this._nudgeThresh("low", -1);
       this._el.hiup.onclick = () => this._nudgeThresh("high", +1);
@@ -546,22 +606,49 @@
     _updateAssist(on) {
       const e = this._el;
       const reactSt = this._hass?.states[this._c.react_switch];
-      const assistOn = reactSt?.state === "on";
-      // Show the Assist block whenever there's a react switch to bind to and the
-      // unit is logically on (which includes assist-on). Absent switch = the
+      const pos = this._assistPos();
+      const assistOn = pos !== "off";
+      // Show the Assist block whenever there's a react entity to bind to and the
+      // unit is logically on (which includes assist-on). Absent entity = the
       // card behaves exactly as before (back-compat).
       const show = !!reactSt && (on || assistOn);
       e.assist.style.display = show ? "" : "none";
       if (!show) return;
 
-      e.atgl.classList.toggle("on", assistOn);
-      e.atgl.setAttribute("aria-checked", assistOn ? "true" : "false");
-
+      // Select-backed Assist = Off/React/Dry segmented control; boolean/switch
+      // keeps the original on/off toggle. Both exist in the DOM (built once);
+      // only visibility is patched here.
+      const isSel = this._assistKind() === "select";
+      e.atgl.style.display = isSel ? "none" : "";
+      e.aseg.style.display = isSel ? "" : "none";
       const pst = this._st()?.state;
       const physOn = pst && pst !== "off";
-      e.astate.textContent = assistOn
-        ? "Assist · " + (physOn ? ACTIVITY[pst] || "active" : "idle")
-        : "Assist off";
+      if (isSel) {
+        const opts = reactSt.attributes?.options || [];
+        const hvac = this._st()?.attributes?.hvac_modes || [];
+        const dryOk = opts.includes("dry") && hvac.includes("dry");
+        e.segBtns.forEach((b) => {
+          const v = b.dataset.v;
+          const sel = v === pos;
+          b.style.display = v !== "dry" || dryOk || sel ? "" : "none";
+          b.classList.toggle("sel", sel);
+          b.setAttribute("aria-checked", sel ? "true" : "false");
+        });
+        let txt = "Assist off";
+        if (pos === "react")
+          txt = "React · " + (physOn ? ACTIVITY[pst] || "active" : "idle");
+        else if (pos === "dry")
+          txt =
+            "Dry · " +
+            (pst === "dry" ? "holding" : physOn ? ACTIVITY[pst] || "active" : "idle");
+        e.astate.textContent = txt;
+      } else {
+        e.atgl.classList.toggle("on", assistOn);
+        e.atgl.setAttribute("aria-checked", assistOn ? "true" : "false");
+        e.astate.textContent = assistOn
+          ? "Assist · " + (physOn ? ACTIVITY[pst] || "active" : "idle")
+          : "Assist off";
+      }
 
       const loEnt = this._hass?.states[this._c.react_low];
       const hiEnt = this._hass?.states[this._c.react_high];
@@ -609,12 +696,8 @@
     }
 
     _toggleAssist() {
-      // Toggle the Climate Assist entity (input_boolean or switch) via the
-      // domain-agnostic homeassistant service so any toggleable domain works.
-      const on = this._assistOn();
-      this._svc("homeassistant", on ? "turn_off" : "turn_on", {
-        entity_id: this._c.react_switch,
-      });
+      // On/off toggle (input_boolean or switch): react <-> off.
+      this._setAssist(this._assistOn() ? "off" : "react");
     }
 
     _nudgeThresh(which, dir) {
@@ -643,10 +726,8 @@
         // while logically on when Assist has cycled it).
         this._optOffUntil = Date.now() + 5000;
         this._optOnUntil = 0;
-        if (this._assistOn())
-          this._svc("homeassistant", "turn_off", {
-            entity_id: this._c.react_switch,
-          });
+        // (select -> "off" via select_option; toggle -> homeassistant.turn_off)
+        if (this._assistOn()) this._setAssist("off");
         if (this._st()?.state !== "off")
           this._svc("climate", "set_hvac_mode", {
             entity_id: this._c.entity,
@@ -793,7 +874,7 @@
             default_minutes: "Timer start value at power-on (minutes, 0 = off)",
             interval_minutes: "Timer dropdown interval (minutes)",
             max_minutes: "Timer dropdown maximum (minutes)",
-            react_switch: "Climate Assist toggle (input_boolean or switch)",
+            react_switch: "Climate Assist entity (input_select off/react/dry, or input_boolean/switch)",
             react_low: "Assist low threshold entity (number/input_number)",
             react_high: "Assist high threshold entity (number/input_number)",
           }[s.name] || s.name);
@@ -843,7 +924,9 @@
           },
           {
             name: "react_switch",
-            selector: { entity: { domain: ["input_boolean", "switch"] } },
+            selector: {
+              entity: { domain: ["input_select", "input_boolean", "switch"] },
+            },
           },
           {
             name: "react_low",
